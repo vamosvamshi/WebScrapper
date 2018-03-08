@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+{% extends "basic_app/base.html" %}
+  {% block body_block %}
+
+  <div class="jumbotron">
+      <h1>THIS IS FROM INDEX PAGE</h1>
+  </div>
+  <div class="jumbotron">
+      <!-- <p><a class="btn btn-primary btn-lg" href="#" role="button">lorem</a></p> -->
+      <p>This page displays the sites it can scrape data from </p>
+      <p>Links to the some of the example URL's are</p>
+      <ul>
+        <li><a href="http://www.amazon.com/product-reviews/B01LYHL9YY/ref=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=all_reviews">AMAZON</a></li>
+        <li><a href="https://www.bestbuy.com/site/reviews/s/5835851">BESTBUY</a></li>
+        <li><a href="https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=1">EBAY</a></li>
+        <li><a href="https://finance.google.com/finance/historical?q=NASDAQ:MSFT&startdate=Dec+10%2C+2016&enddate=Dec+10%2C+2017&num=200&ei=HV3FWauPPIi_jAHlsozoAQ&start=0">GOOGLE</a></li>
+        <li><a href="https://finance.yahoo.com/quote/MSFT/history?period1=1497243600&period2=1507784400&interval=1d&filter=history&frequency=1d">YAHOO</a></li>
+      </ul>
+  </div>
+
+  {% endblock %}

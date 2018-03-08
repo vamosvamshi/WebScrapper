@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+{% extends "basic_app/base.html" %}
+  {% block body_block %}
+
+  <div class="jumbotron">
+    <h1>Welcome to Amazon data extraction</h1>
+  </div>
+  <form method="post">
+    <div class="jumbotron">
+      {{form1.as_p}}
+      {% csrf_token %}
+      <input type="submit" class="btn btn-success btn-lg" name="" value="ENTER">
+    </div>
+  </form>
+  {% endblock %}
