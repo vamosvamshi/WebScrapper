@@ -114,9 +114,11 @@ def google_write(tckr,sd,sm,sy,ed,em,ey):
 
 def yahoo(request):
     form5 = forms.FormName_yahoo()
+    #verifying that its yahoo page that is being requested by forms.
     if request.method == 'POST':
         form5 = forms.FormName_yahoo(request.POST)
 
+        #get the inputs from the html page to process and verify if validation was success
         if form5.is_valid():
             print("validation success")
             TICKER = form5.cleaned_data["YahooCompanyTicker"]
@@ -131,11 +133,13 @@ def yahoo(request):
     return render(request, 'basic_app/Yahoo.html',{'form5':form5})
 
 def yahoo_write(tckr,sd,sm,sy,ed,em,ey):
+    # set the ticker value from the file, strip and make everything into uppercase
     ticker = tckr.upper().strip()
     m1 = str(sm).strip()
     d1 = str(sd).strip()
     y1 = str(sy).strip()
 
+    # sets the end and start dates from the render to the values that would be used in the string and convert them to a string
     m2 = str(em).strip()
     d2 = str(ed).strip()
     y2 = str(ey).strip()
@@ -146,6 +150,8 @@ def yahoo_write(tckr,sd,sm,sy,ed,em,ey):
     print ("end date is %s and type is %s "%(enddate,type(enddate)))
     print("ticker is %s and type is %s" %(ticker,type(ticker)))
 
+    # Timestamp value for startdate and enddate is the complete numerical representation of date, month and year
+    # representation of date.
     timestamp_startdate = int(time.mktime(datetime.datetime.strptime(startdate, "%m/%d/%Y").timetuple()))
     timestamp_enddate = int(time.mktime(datetime.datetime.strptime(enddate, "%m/%d/%Y").timetuple()))
     timestamp_difference = int(timestamp_enddate) - int(timestamp_startdate)
@@ -155,39 +161,49 @@ def yahoo_write(tckr,sd,sm,sy,ed,em,ey):
     print("start time is ", int(timestamp_startdate))
     print("end time is ", int(timestamp_enddate))
     print("difference in timestamp is ", ((timestamp_enddate) - (timestamp_startdate)))
-
+    # This is the value need to make it a shift by one day i.e. 24 hours in time stamp conversion.
     step = int(10540800)
     table_complete = []
 
     pool_input_list = []
     pool_input_tuple = ()
     j=0
+    # The range starts from descending order from the last date to the date which comes by subtracting the one page
+    # value of timestamp.
     for i in range(actual_start, actual_end, step):
         timestamp_startdate = timestamp_enddate - 10540800
         if (timestamp_startdate <= actual_start):
             timestamp_startdate = actual_start
+        # Ticker name is company name in 2-4 letters is unique for every product, this needs to be changed to get value
+        #  of each product.
         url_page = "https://finance.yahoo.com/quote/" + ticker + "/history?period1=" + str(
             timestamp_startdate) + "&period2=" + str(timestamp_enddate) + "&interval=1d&filter=history&frequency=1d"
 
+        # Creates a list of URLs, one for each page. We can only do this if we get the total no. of pages in the previous
+        #  step.
         pool_input_list.append([[j,url_page]])
         timestamp_enddate = timestamp_startdate - 86400
         j = j+1
+    # All the pages are then appended into a list in the previous step and converted into a tuple.
     pool_input_tuple = tuple(pool_input_list)
     print(pool_input_tuple)
 
+    # The multiprocessing process is initiated with a total number of processes as 4. The URLs and the URL numbers
+    # are passed as a input.
     p = multiprocessing.Pool(processes=4)
     p.map(parsing_yahoo, pool_input_tuple)
 
-
+    #This function is specific to excel sheets combining.
     merge_all_to_a_book(glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/*.xlsx"), "C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/Yahoo Data combined.xlsx")
 
-
+    # All the files that were created per page are accessed and combined into a single Combined file.
     rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/*.txt")
     with  open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/Yahoo Data combined.txt","wb") as outfile:
         for f in rd:
             with open(f, "rb") as infille:
                 outfile.write(infille.read())
 
+    # The single file is opened and all the lines are read, this is done to display the output to the screen.
     file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/Yahoo Data combined.txt")
     lines = file.readlines()
     for line in lines:
@@ -196,9 +212,12 @@ def yahoo_write(tckr,sd,sm,sy,ed,em,ey):
 
 
 def parsing_yahoo(poolinput):
+    # The last file name is obtained to get the name of the folder to be created using regular expressions.
     k = re.findall("[A-Z]+", poolinput[0][1])
     print("k is {}",k)
     table_complete=[]
+
+    # Scraping process starts here
     for i in range(len(poolinput)):
 
         url = poolinput[i][1]
@@ -212,6 +231,8 @@ def parsing_yahoo(poolinput):
         # append into table_complete the values after each iteration.
         table_complete.append(table)
 
+    # If there exists a folder with this name, it replaces files in it, if not it creates a new folder and saves
+    # the files in that folder.
     if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + k[0]):
         os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + k[0] + "/")
     workbook  = xlsxwriter.Workbook("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + str(k[0]) + "/" + str(
@@ -224,6 +245,7 @@ def parsing_yahoo(poolinput):
     # initializing values to set the cell numbers
     i = 0
     j = 0
+    # this is for printing the commments and writing the lines to the file.
     for x in table_complete:
         for y in x:
             f.write(y.text + "\n\n")
@@ -257,17 +279,22 @@ def ebay_write(itm):
     '''item number of the product, different items have different items numbers in ebay'''
     '''change the ones that says itm =  "some number" to change the comments displayed'''
     #item_number = item_no[-1].strip()
-
+    # Item no is unique for every product, this needs to be changed to get value of each product.
     url1 = "https://www.ebay.com/urw/product-reviews/" + str(item_number) + "?_itm=1000047616"
 
+    #Headers are in place to spoof the website that it is actually a browser that's accessing it, else it will block
+    # the request if it's from an automated script.
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
     a = requests.get(url1, headers=headers)
+
+    # Let's the BeautifulSoup know that the parsed content is of the type HTML.
     soup = BeautifulSoup(a.content, "html.parser")
 
     '''to find the page number of the last page, so as to make it possible to loop so many times'''
     page_number = []
     try:
+        # ebay has its last page number in this class in this parameter as button, we need to get to that.
         table1 = soup.find_all("a", {"class": " spf-link"})
         for item in table1:
             page_number.append(item.text)
@@ -279,10 +306,14 @@ def ebay_write(itm):
 
     pool_input_list = []
     pool_input_tuple = ()
+    # Creates a list of URLs, one for each page. We can only do this if we get the total no. of pages in the previous
+    #  step.
     for i in range(int(last_page) + 1):
         url_last_page = url1 + "&pgn=" + str(i).strip()
         # print("url for page %d is %s"%(i,url_last_page))
         pool_input_list.append([[i, url_last_page]])
+
+    # All the pages are then appended into a list in the previous step and converted into a tuple.
     pool_input_tuple = tuple(pool_input_list)
     print(pool_input_tuple)
 
@@ -297,14 +328,17 @@ def ebay_write(itm):
                    [[0, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=0']],
                     [[1, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=1']])'''
 
+    # The multiprocessing process is initiated with a total number of processes as 4. The URLs and the URL numbers
+    # are passed as a input.
     p = multiprocessing.Pool(processes=4)
     p.map(ParsingPage_ebay, pool_input_tuple)
+    # All the files that were created per page are accessed and combined into a single Combined file.
     rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"/*.txt")
     with open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"/Ebay Comments combined.txt","wb") as outfile:
          for f in rd:
             with open(f, "rb") as infille:
                 outfile.write(infille.read())
-
+    # The single file is opened and all the lines are read, this is done to display the output to the screen.
     file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"/Ebay Comments combined.txt")
     lines = file.readlines()
     for line in lines:
@@ -312,10 +346,16 @@ def ebay_write(itm):
     file.close()
 
 def ParsingPage_ebay(pool_input1):
+    # The last file name is obtained to get the name of the folder to be created, this is using regular expressions
+    # filtering.
     k = re.findall("\d+",pool_input1[0][1])
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
+
+    # Scraping process starts here
     for i in range(len(pool_input1)):
+        # If there exists a folder with this name, it replaces files in it, if not it creates a new folder and saves
+        # the files in that folder.
         if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+k[0]):
             os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+k[0]+"/")
         f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+k[0]+"/"+ str(pool_input1[i][0]).strip() + ".txt","w+")
@@ -325,6 +365,8 @@ def ParsingPage_ebay(pool_input1):
         table2 = soup.find_all("p", {"itemprop": "reviewBody"})
         print("process " + str(pool_input1[i][0]) + " done")
         print(pool_input1[i][1])
+
+        # this is for printing the commments and writing the lines to the file.
         for item in table2:
             #yield(item.text)
             print(item.text)
@@ -348,16 +390,21 @@ def bestbuy(request):
     return render(request, 'basic_app/BestBuy.html',{'form2':form2})
 
 def bestbuy_write(bbpc):
+    # product id is unique for every product, this needs to be changed to get value of each product.
     product_id = str(bbpc).strip()
     url = "https://www.bestbuy.com/site/reviews/s/"+product_id
     #url = "https://www.bestbuy.com/site/reviews/s/"+str(product_id)+"?page=2&sort=MOST_HELPFUL"
     print(url)
 
+    #Headers are in place to spoof the website that it is actually a browser that's accessing it, else it will block
+    # the request if it's from an automated script.
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
     a = requests.get(url, headers=headers)
 
+    # Let's the BeautifulSoup know that the parsed content is of the type HTML.
     soup = BeautifulSoup(a.content, "html.parser")
     # print(soup.text)
+    # bestbuy has its last page number in this class in this parameter as button, we need to get to that.
     page_number=[]
     table1 = soup.find_all("span",{"class":"message-text"})
     for item in table1:
@@ -373,16 +420,24 @@ def bestbuy_write(bbpc):
 
     pool_input_list = []
     pool_input_tuple = ()
+    # Creates a list of URLs, one for each page. We can only do this if we get the total no. of pages in the previous
+    #  step.
     for i in range(int(last_page) + 1):
         url_last_page = "https://www.bestbuy.com/site/reviews/s/" + str(product_id) + "?page=" + str(
             i) + "&sort=MOST_HELPFUL"
         pool_input_list.append([[i, url_last_page]])
+
+    # All the pages are then appended into a list in the previous step and converted into a tuple.
     pool_input_tuple = tuple(pool_input_list)
     print(pool_input_tuple)
 
+    # The multiprocessing process is initiated with a total number of processes as 4. The URLs and the URL numbers
+    # are passed as a input.
     p = multiprocessing.Pool(processes=4)
     p.map(ParsingPage_bestbuy, pool_input_tuple)
     #print("total time taken in multiprocessing pool is " + str(time.time() - t1))
+
+    # All the files that were created per page are accessed and combined into a single Combined file.
     rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+str(product_id)+"/*.txt")
     with open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+str(product_id)+"/BestBuy Comments combined.txt",
               "wb") as outfile:
@@ -390,6 +445,7 @@ def bestbuy_write(bbpc):
             with open(f, "rb") as infille:
                 outfile.write(infille.read())
 
+    # The single file is opened and all the lines are read, this is done to display the output to the screen.
     file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+str(product_id)+"/BestBuy Comments combined.txt")
     lines = file.readlines()
     for line in lines:
@@ -398,10 +454,16 @@ def bestbuy_write(bbpc):
 
 
 def ParsingPage_bestbuy(pool_input1):
+    # The last file name is obtained to get the name of the folder to be created, this is using regular expressions
+    # filtering.
     k = re.findall("\d+", pool_input1[0][1])
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
+
+    # Scraping process starts here
     for i in range(len(pool_input1)):
+        # If there exists a folder with this name, it replaces files in it, if not it creates a new folder and saves
+        # the files in that folder.
         if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+k[0]):
             os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+k[0]+"/")
         f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+k[0]+"/"+ str(pool_input1[i][0]).strip() + ".txt",
@@ -411,6 +473,8 @@ def ParsingPage_bestbuy(pool_input1):
         soup = BeautifulSoup(a.content, "html.parser")
         table2 = soup.find_all("p", {"class": "pre-white-space"})
         print("process " + str(pool_input1[i][0]) + " done")
+
+        # this is for printing the commments and writing the lines to the file.
         for item in table2:
             print(item.text)
             try:
@@ -433,21 +497,25 @@ def amazon(request):
     return render(request, 'basic_app/Amazon.html',{'form1':form1})
 
 def amazon_write(nm):
+    # ASIN is unique for every product, this needs to be changed to get value of each product.
     ASIN = nm.strip()
 
     url2 = "http://www.amazon.com/product-reviews/" + ASIN + "/ref" \
                                                              "=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=all_reviews"
 
     print(url2)
-
+    #Headers are in place to spoof the website that it is actually a browser that's accessing it, else it will block
+    # the request if it's from an automated script.
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
     a = requests.get(url2, headers=headers)
-
+    # Let's the BeautifulSoup know that the parsed content is of the type HTML.
     soup = BeautifulSoup(a.content, "html.parser")
+
+    # Amazon has its last page number in this class in this parameter as button, we need to get to that.
     table1 = soup.find_all("li", {"class": "page-button"})
     page = []
-
+    # This is for printing the page numbers
     for item in table1:
         item_removed_comma = (item.text).replace(",", "")
         page.append(int(item_removed_comma))
@@ -456,49 +524,37 @@ def amazon_write(nm):
 
     pool_input_list=[]
     pool_input_tuple=()
+    # Creates a list of URLs, one for each page. We can only do this if we get the total no. of pages in the previous
+    #  step.
     for i in range(page_max):
         url2 = "http://www.amazon.com/product-reviews/" + ASIN + "/ref" \
                 "=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=all_reviews&pageNumber=" + str(i)
         pool_input_list.append([[i, url2]])
+
+    # All the pages are then appended into a list in the previous step and converted into a tuple.
     pool_input_tuple = tuple(pool_input_list)
     print(pool_input_tuple)
 
+    # The multiprocessing process is initiated with a total number of processes as 4. The URLs and the URL numbers
+    # are passed as a input.
     p = multiprocessing.Pool(processes=4)
     p.map(parsing_amazon, pool_input_tuple)
-
+    # All the files that were created per page are accessed and combined into a single Combined file.
     rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(ASIN)+"/*.txt")
     with open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(ASIN)+"/Amazon Comments combined.txt", "wb") as outfile:
         for f in rd:
             with open(f, "rb") as infille:
                 outfile.write(infille.read())
 
+    # The single file is opened and all the lines are read, this is done to display the output to the screen.
     file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(ASIN)+"/Amazon Comments combined.txt")
     lines = file.readlines()
     for line in lines:
         yield(line)
     file.close()
-    '''
-    # table = soup.find_all("div","span", { "class":"a-row review-data","class":"a-size-base review-text",\
-    f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+ASIN+"--Amazon Comments.txt", "w+")
-    for i in range(1, page_max, 1):
 
-        url2 = "http://www.amazon.com/product-reviews/" + ASIN + "/ref" \
-                                            "=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=all_reviews&pageNumber=" + str(i)
-        print(url2)
-        a = requests.get(url2, headers=headers)
-        soup = BeautifulSoup(a.content, "html.parser")
-        table2 = soup.find_all("span", {"class": "review-text"})
-
-        # this is for printing the commments and writing the lines to the file.
-        for item in table2:
-            yield(item.text+"\n\n")
-            try:
-                f.write(item.text + "\n\n")
-            except:
-                pass
-
-    f.close()'''
 def parsing_amazon(pool_input):
+    # The last file name is obtained to get the name of the folder to be created.
     k = re.findall("[A-Z0-9]+", pool_input[0][1])
     print("k is ")
     print (k)
