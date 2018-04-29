@@ -16,6 +16,8 @@ import urllib.request
 import bs4 as bs
 import xlsxwriter
 import math
+import os
+from pyexcel.cookbook import merge_all_to_a_book
 
 # Create your views here.
 def index(request):
@@ -53,7 +55,7 @@ def google_write(tckr,sd,sm,sy,ed,em,ey):
     start_date = ("{}/{}/{}".format(d1, m1, y1))
     print("start date is {}".format(start_date))
     end_date = ("{}/{}/{}".format(d2, m2, y2))
-    print("end date is {}".format(end_date))
+    # print("end date is {}".format(end_date))
     '''set the ticker value from the text file'''
 
     start_timestamp = time.mktime(datetime.datetime.strptime(start_date, "%d/%m/%Y").timetuple())
@@ -150,49 +152,90 @@ def yahoo_write(tckr,sd,sm,sy,ed,em,ey):
     actual_end = (timestamp_enddate)
     actual_start = (timestamp_startdate)
 
-    print("start time is ",int(timestamp_startdate))
-    print("end time is ",int(timestamp_enddate))
-    print("difference in timestamp is ",((timestamp_enddate)-(timestamp_startdate)))
+    print("start time is ", int(timestamp_startdate))
+    print("end time is ", int(timestamp_enddate))
+    print("difference in timestamp is ", ((timestamp_enddate) - (timestamp_startdate)))
 
     step = int(10540800)
     table_complete = []
-    for i in range (actual_start,actual_end,step):
 
+    pool_input_list = []
+    pool_input_tuple = ()
+    j=0
+    for i in range(actual_start, actual_end, step):
         timestamp_startdate = timestamp_enddate - 10540800
         if (timestamp_startdate <= actual_start):
             timestamp_startdate = actual_start
-        url_yahoo = "https://finance.yahoo.com/quote/"+ticker+"/history?period1="+str(
-            timestamp_startdate)+"&period2="+str(timestamp_enddate)+"&interval=1d&filter=history&frequency=1d"
-        print (url_yahoo)
+        url_page = "https://finance.yahoo.com/quote/" + ticker + "/history?period1=" + str(
+            timestamp_startdate) + "&period2=" + str(timestamp_enddate) + "&interval=1d&filter=history&frequency=1d"
 
-        url1 =urllib.request.urlopen(url_yahoo).read()
+        pool_input_list.append([[j,url_page]])
+        timestamp_enddate = timestamp_startdate - 86400
+        j = j+1
+    pool_input_tuple = tuple(pool_input_list)
+    print(pool_input_tuple)
 
-        soup = bs.BeautifulSoup(url1,'html.parser')
+    p = multiprocessing.Pool(processes=4)
+    p.map(parsing_yahoo, pool_input_tuple)
+
+
+    merge_all_to_a_book(glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/*.xlsx"), "C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/Yahoo Data combined.xlsx")
+
+
+    rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/*.txt")
+    with  open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/Yahoo Data combined.txt","wb") as outfile:
+        for f in rd:
+            with open(f, "rb") as infille:
+                outfile.write(infille.read())
+
+    file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/"+str(ticker)+"/Yahoo Data combined.txt")
+    lines = file.readlines()
+    for line in lines:
+        yield(line)
+    file.close()
+
+
+def parsing_yahoo(poolinput):
+    k = re.findall("[A-Z]+", poolinput[0][1])
+    print("k is {}",k)
+    table_complete=[]
+    for i in range(len(poolinput)):
+
+        url = poolinput[i][1]
+        print(poolinput[i][0])
+
+        url1 = urllib.request.urlopen(url).read()
+
+        soup = bs.BeautifulSoup(url1, 'html.parser')
 
         table = soup.find_all('tr')
-        #append into table_complete the values after each iteration.
+        # append into table_complete the values after each iteration.
         table_complete.append(table)
 
-        timestamp_enddate = timestamp_startdate - 86400
-
-    #opening the excel sheet to write the data into
-    workbook = xlsxwriter.Workbook('C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/'+ticker+'--Yahoo Finance Data.xlsx')
+    if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + k[0]):
+        os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + k[0] + "/")
+    workbook  = xlsxwriter.Workbook("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + str(k[0]) + "/" + str(
+        poolinput[i][0]).strip() + ".xlsx")
     worksheet = workbook.add_worksheet()
-    #initializing values to set the cell numbers
-    i=0
-    j=0
 
+    f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/yahoo/" + str(k[0]) + "/" + str(poolinput[i][0]).strip()+".txt","w+")
+    print("process " + str(poolinput[i][0]) + " done")
+
+    # initializing values to set the cell numbers
+    i = 0
+    j = 0
     for x in table_complete:
         for y in x:
+            f.write(y.text + "\n\n")
             for z in y:
-                worksheet.write(j,i,z.text)
-                print (z.text,end=",,")
-                yield(str(z.text+"\n"))
-                i=i+1
-            i=0
+                #f.write(y.text + "\n\n")
+                worksheet.write(j, i, z.text)
+                print(z.text, end=",,")
+                #yield (str(z.text + "\n"))
+                i = i + 1
+            i = 0
             print("\n")
-            j=j+1
-
+            j = j + 1
     workbook.close()
 
 def ebay(request):
@@ -211,42 +254,85 @@ def ebay(request):
 def ebay_write(itm):
 
     item_number = itm.strip()
-    url1 ="https://www.ebay.com/urw/product-reviews/"+str(item_number)+"?_itm=1000047616"
+    '''item number of the product, different items have different items numbers in ebay'''
+    '''change the ones that says itm =  "some number" to change the comments displayed'''
+    #item_number = item_no[-1].strip()
 
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
+    url1 = "https://www.ebay.com/urw/product-reviews/" + str(item_number) + "?_itm=1000047616"
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
     a = requests.get(url1, headers=headers)
-
     soup = BeautifulSoup(a.content, "html.parser")
 
     '''to find the page number of the last page, so as to make it possible to loop so many times'''
-    page_number=[]
+    page_number = []
     try:
-        table1 = soup.find_all("a",{"class":" spf-link"})
+        table1 = soup.find_all("a", {"class": " spf-link"})
         for item in table1:
             page_number.append(item.text)
-            print(item.text)
-
         '''last page it the second from the last'''
-        print ("last page number is "+page_number[-2])
+        print("last page number is " + page_number[-2])
         last_page = page_number[-2]
     except IndexError:
-        last_page=1
-    f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"--Ebay Comments.txt", "w+")
-    '''iterating the loop so many times'''
-    for i in range(1,int(last_page)+1,1):
-        url2 = url1+"&pgn="+str(i).strip()
-        a = requests.get(url2, headers=headers)
-        soup = BeautifulSoup(a.content, "html.parser")
-        table2 = soup.find_all("p",{"itemprop":"reviewBody"})
-        print(url2)
+        last_page = 1
+
+    pool_input_list = []
+    pool_input_tuple = ()
+    for i in range(int(last_page) + 1):
+        url_last_page = url1 + "&pgn=" + str(i).strip()
+        # print("url for page %d is %s"%(i,url_last_page))
+        pool_input_list.append([[i, url_last_page]])
+    pool_input_tuple = tuple(pool_input_list)
+    print(pool_input_tuple)
+
+    '''
+    pool_input1 = ([[0, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=0'],
+                   [1, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=1']],
+                 [[0, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=0'],
+                  [1, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=1']])
+
+    pool_input1 = ([[0, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=0']],
+                    [[1, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=1']],
+                   [[0, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=0']],
+                    [[1, 'https://www.ebay.com/urw/product-reviews/110891711?_itm=1000047616&pgn=1']])'''
+
+    p = multiprocessing.Pool(processes=4)
+    p.map(ParsingPage_ebay, pool_input_tuple)
+    rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"/*.txt")
+    with open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"/Ebay Comments combined.txt","wb") as outfile:
+         for f in rd:
+            with open(f, "rb") as infille:
+                outfile.write(infille.read())
+
+    file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+str(item_number)+"/Ebay Comments combined.txt")
+    lines = file.readlines()
+    for line in lines:
+        yield(line)
+    file.close()
+
+def ParsingPage_ebay(pool_input1):
+    k = re.findall("\d+",pool_input1[0][1])
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
+    for i in range(len(pool_input1)):
+        if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+k[0]):
+            os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+k[0]+"/")
+        f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/ebay/"+k[0]+"/"+ str(pool_input1[i][0]).strip() + ".txt","w+")
+        print("url from ParsingPage "+pool_input1[i][1])
+        a = requests.get(pool_input1[i][1], headers=headers)
+        soup = BeautifulSoup(a.content, "lxml")
+        table2 = soup.find_all("p", {"itemprop": "reviewBody"})
+        print("process " + str(pool_input1[i][0]) + " done")
+        print(pool_input1[i][1])
         for item in table2:
-            yield(item.text)
+            #yield(item.text)
             print(item.text)
             try:
-                f.write(item.text+"\n\n")
+                f.write(item.text + "\n\n")
             except:
                 pass
-    f.close()
+        f.close()
 
 def bestbuy(request):
     form2 = forms.FormName_bestbuy()
@@ -280,26 +366,57 @@ def bestbuy_write(bbpc):
 
     print("items in page_number are ",page_number[:])
     split_message = page_number[0].split(" ")
-    print("the number of reviews are ",split_message[-2])
-    last_page=(int(split_message[-2]))
+    print("the number of reviews are ",split_message[-2].replace(",",""))
+    last_page = int(split_message[-2].replace(",",""))
     last_page=(last_page/20)+1
     print("last page is ",last_page)
-    f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+product_id+"--BestBuy Comments.txt", "w+")
 
-    for i in range(1,int(last_page),1):
-        url1="https://www.bestbuy.com/site/reviews/s/"+str(product_id)+"?page="+str(i)+"&sort=MOST_HELPFUL"
-        a = requests.get(url1, headers=headers)
+    pool_input_list = []
+    pool_input_tuple = ()
+    for i in range(int(last_page) + 1):
+        url_last_page = "https://www.bestbuy.com/site/reviews/s/" + str(product_id) + "?page=" + str(
+            i) + "&sort=MOST_HELPFUL"
+        pool_input_list.append([[i, url_last_page]])
+    pool_input_tuple = tuple(pool_input_list)
+    print(pool_input_tuple)
+
+    p = multiprocessing.Pool(processes=4)
+    p.map(ParsingPage_bestbuy, pool_input_tuple)
+    #print("total time taken in multiprocessing pool is " + str(time.time() - t1))
+    rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+str(product_id)+"/*.txt")
+    with open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+str(product_id)+"/BestBuy Comments combined.txt",
+              "wb") as outfile:
+        for f in rd:
+            with open(f, "rb") as infille:
+                outfile.write(infille.read())
+
+    file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+str(product_id)+"/BestBuy Comments combined.txt")
+    lines = file.readlines()
+    for line in lines:
+        yield(line)
+    file.close()
+
+
+def ParsingPage_bestbuy(pool_input1):
+    k = re.findall("\d+", pool_input1[0][1])
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
+    for i in range(len(pool_input1)):
+        if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+k[0]):
+            os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+k[0]+"/")
+        f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/bestbuy/"+k[0]+"/"+ str(pool_input1[i][0]).strip() + ".txt",
+                 "w+")
+        #url1 = "https://www.bestbuy.com/site/reviews/s/" + str(product_id) + "?page=" + str(i) + "&sort=MOST_HELPFUL"
+        a = requests.get(pool_input1[i][1], headers=headers)
         soup = BeautifulSoup(a.content, "html.parser")
-        table2 = soup.find_all("p",{"class":"pre-white-space"})
-        print(url1)
+        table2 = soup.find_all("p", {"class": "pre-white-space"})
+        print("process " + str(pool_input1[i][0]) + " done")
         for item in table2:
             print(item.text)
-            yield(item.text)
             try:
-                f.write(item.text+"\n\n")
+                f.write(item.text + "\n\n")
             except:
                 pass
-
     f.close()
 
 def amazon(request):
@@ -336,6 +453,31 @@ def amazon_write(nm):
         page.append(int(item_removed_comma))
     print(page)
     page_max = page[-1]
+
+    pool_input_list=[]
+    pool_input_tuple=()
+    for i in range(page_max):
+        url2 = "http://www.amazon.com/product-reviews/" + ASIN + "/ref" \
+                "=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=all_reviews&pageNumber=" + str(i)
+        pool_input_list.append([[i, url2]])
+    pool_input_tuple = tuple(pool_input_list)
+    print(pool_input_tuple)
+
+    p = multiprocessing.Pool(processes=4)
+    p.map(parsing_amazon, pool_input_tuple)
+
+    rd = glob.glob("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(ASIN)+"/*.txt")
+    with open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(ASIN)+"/Amazon Comments combined.txt", "wb") as outfile:
+        for f in rd:
+            with open(f, "rb") as infille:
+                outfile.write(infille.read())
+
+    file = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(ASIN)+"/Amazon Comments combined.txt")
+    lines = file.readlines()
+    for line in lines:
+        yield(line)
+    file.close()
+    '''
     # table = soup.find_all("div","span", { "class":"a-row review-data","class":"a-size-base review-text",\
     f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+ASIN+"--Amazon Comments.txt", "w+")
     for i in range(1, page_max, 1):
@@ -350,6 +492,36 @@ def amazon_write(nm):
         # this is for printing the commments and writing the lines to the file.
         for item in table2:
             yield(item.text+"\n\n")
+            try:
+                f.write(item.text + "\n\n")
+            except:
+                pass
+
+    f.close()'''
+def parsing_amazon(pool_input):
+    k = re.findall("[A-Z0-9]+", pool_input[0][1])
+    print("k is ")
+    print (k)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36'}
+
+    for i in range(len(pool_input)):
+        #f = open("E:/Graduate Project/finance data/Amazon Comments.txt" + str(pool_input[i][0]).strip() + ".txt", "w+")
+        if not os.path.exists("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/" + k[0]):
+            os.makedirs("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/" + k[0] + "/")
+        f = open("C:/Users/vamshi/Desktop/DATA_EXTRACTION/amazon/"+str(k[0])+"/" + str(pool_input[i][0]).strip()
+                 +".txt",
+                                                                       "w+")
+        print(pool_input[i][1])
+        url=pool_input[i][1]
+        a = requests.get(url, headers=headers)
+        #soup = BeautifulSoup(a.content, "lxml")
+        soup = BeautifulSoup(a.content, "html.parser")
+        table2 = soup.find_all("span", {"class": "review-text"})
+        print("process " + str(pool_input[i][0]) + " done")
+        # this is for printing the commments and writing the lines to the file.
+        for item in table2:
+            print(item.text + "\n")
             try:
                 f.write(item.text + "\n\n")
             except:
